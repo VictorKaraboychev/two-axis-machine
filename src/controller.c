@@ -45,11 +45,7 @@ bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 
 	if ((currentTime - switchState->lastDebounceTime) >= delay)
 	{
-		// If the pin state has been stable for the delay period
-		if (currentState == switchState->lastState)
-		{
-			return currentState;
-		}
+		return currentState;
 	}
 
 	return false;
