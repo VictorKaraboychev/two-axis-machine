@@ -2,13 +2,9 @@
 #define CONTROLLER_H
 
 #include "stm32f4xx.h"
-// #include "stm32f4xx_nucleo.h"
-// #include "system_stm32f4xx.h"
 #include "stm32f4xx_hal_gpio.h"
 #include "stm32f4xx_hal_rcc.h"
-#include "example_usart.h"
 
-// #include <SPI.h>
 #include <L6470.h>
 
 #include <stdbool.h>

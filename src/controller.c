@@ -45,11 +45,7 @@ bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 
 	if ((currentTime - switchState->lastDebounceTime) >= delay)
 	{
-		// If the pin state has been stable for the delay period
-		if (currentState == switchState->lastState)
-		{
-			return currentState;
-		}
+		return currentState;
 	}
 
 	return false;
@@ -57,12 +53,19 @@ bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 
 ADC_HandleTypeDef hadc1;
 
-float readAnalog(void)
+float readAnalog(uint32_t channel)
 {
-	if (HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK)
+	ADC_ChannelConfTypeDef sConfig;
+	sConfig.Channel = channel;
+	sConfig.Rank = 1;
+	sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+
+	HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
+	HAL_ADC_Start(&hadc1);
+	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
 	{
-		uint32_t adc_value = HAL_ADC_GetValue(&hadc1);
-		return (float)(adc_value / 2047.5f) - 1.0f; // Scale 12-bit ADC value to -1 - 1 range
+		return (float)HAL_ADC_GetValue(&hadc1) / 255.0f;
 	}
 	return 0.0f; // Return 0 if ADC read fails
 }
@@ -74,40 +77,40 @@ void ControllerInit()
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 
 	// Configure GPIO pins for limit switches
-	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitTypeDef GPIO_InitStruct;
 
-	GPIO_InitStructure.Pin = GPIO_PIN_8 | GPIO_PIN_9;
-	GPIO_InitStructure.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStructure.Pull = GPIO_PULLUP;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+	GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-	GPIO_InitStructure.Pin = GPIO_PIN_4 | GPIO_PIN_10;
-	GPIO_InitStructure.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStructure.Pull = GPIO_PULLUP;
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+	GPIO_InitStruct.Pin = GPIO_PIN_4 | GPIO_PIN_10;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1;
+	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 	ADC_ChannelConfTypeDef sConfig;
 
 	// Common analog config
 	hadc1.Instance = ADC1;
-	hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
-	hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-	hadc1.Init.ScanConvMode = DISABLE;
-	hadc1.Init.ContinuousConvMode = DISABLE;
-	hadc1.Init.DiscontinuousConvMode = DISABLE;
-	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-	hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc1.Init.NbrOfConversion = 1;
-	hadc1.Init.DMAContinuousRequests = DISABLE;
-	hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+	hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+	hadc1.Init.Resolution = ADC_RESOLUTION_8B;
+	// hadc1.Init.ScanConvMode = DISABLE;
+	// hadc1.Init.ContinuousConvMode = DISABLE;
+	// hadc1.Init.DiscontinuousConvMode = DISABLE;
+	// hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+	// hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+	// hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+	// hadc1.Init.NbrOfConversion = 1;
+	// hadc1.Init.DMAContinuousRequests = DISABLE;
+	// hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
 
-	// Configure for the selected ADC regular channel to be converted.
-	sConfig.Channel = ADC_CHANNEL_0; // Adjust according to the pin you're using
-	sConfig.Rank = 1;
-	sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-
-	HAL_ADC_Start(&hadc1);
+	HAL_ADC_Init(&hadc1);
 
 	velocityX = 1000;
 	velocityY = 1000;
@@ -121,28 +124,39 @@ void ControllerMain()
 	bool limitSwitchPosY = debounceLimitSwitch(&switchPosY, DEBOUNCE_DELAY);
 	bool limitSwitchNegY = debounceLimitSwitch(&switchNegY, DEBOUNCE_DELAY);
 
-	// float analogValue = readAnalog();
+	float potX = readAnalog(ADC_CHANNEL_0);
+	float potY = readAnalog(ADC_CHANNEL_1);
 
-	// printf("Analog value: %f\n", analogValue);
+	char bufferX[100];
+	gcvt(potX, 2, bufferX);
+
+	char bufferY[100];
+	gcvt(potY, 2, bufferY);
+
+	printf("Analog value: ");
+	printf(bufferX);
+	printf(" ");
+	printf(bufferY);
+	printf("\n");
 
 	if (limitSwitchPosX && velocityX > 0.0f) // Hit positive X limit switch
 	{
 		velocityX = -1000;
 
-		USART_Transmit(&huart2, "Hit positive X limit switch\n");
+		printf("Hit positive X limit switch\n");
 	}
 	else if (limitSwitchNegX && velocityX < 0.0f) // Hit negative X limit switch
 	{
 		positionX = 0;
 		velocityX = 1000;
 
-		USART_Transmit(&huart2, "Hit negative X limit switch\n");
+		printf("Hit negative X limit switch\n");
 	}
 
 	// Run the X motor if the velocity has changed
 	if (currentVelocityX != velocityX)
 	{
-		USART_Transmit(&huart2, "Running X motor\n");
+		printf("Running X motor\n");
 
 		L6470_Run(L6470_X, sign(velocityX), abs(velocityX));
 		currentVelocityX = velocityX;
@@ -152,20 +166,20 @@ void ControllerMain()
 	{
 		velocityY = -1000;
 
-		USART_Transmit(&huart2, "Hit positive Y limit switch\n");
+		printf("Hit positive Y limit switch\n");
 	}
 	else if (limitSwitchNegY && velocityY < 0.0f) // Hit negative Y limit switch
 	{
 		positionY = 0;
 		velocityY = 1000;
 
-		USART_Transmit(&huart2, "Hit negative Y limit switch\n");
+		printf("Hit negative Y limit switch\n");
 	}
 
 	// Run the Y motor if the velocity has changed
 	if (currentVelocityY != velocityY)
 	{
-		USART_Transmit(&huart2, "Running Y motor\n");
+		printf("Running Y motor\n");
 
 		L6470_Run(L6470_Y, sign(velocityY), abs(velocityY));
 		currentVelocityY = velocityY;
@@ -175,10 +189,11 @@ void ControllerMain()
 	if ((limitSwitchPosX && limitSwitchNegX) || (limitSwitchPosY && limitSwitchNegY))
 	{
 		velocityX = 0.0f;
-		L6470_HardStop(L6470_X);
 		velocityY = 0.0f;
+
+		L6470_HardStop(L6470_X);
 		L6470_HardStop(L6470_Y);
 
-		USART_Transmit(&huart2, "Hit both limit switches\n");
+		// printf("Hit both limit switches\n");
 	}
 }
