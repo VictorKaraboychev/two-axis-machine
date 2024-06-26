@@ -14,6 +14,8 @@
 
 #define DEBOUNCE_DELAY 5
 
+#define MAX_VELOCITY 10000.0f
+
 typedef struct
 {
 	GPIO_TypeDef *GPIOx;
@@ -25,10 +27,13 @@ typedef struct
 void ControllerInit();
 void ControllerMain();
 
-int positionX;
-int velocityX;
+int targetPositionX;
+int targetVelocityX;
 
-int positionY;
-int velocityY;
+int targetPositionY;
+int targetVelocityY;
+
+int currentVelocityX;
+int currentVelocityY;
 
 #endif // CONTROLLER_H

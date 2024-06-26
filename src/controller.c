@@ -22,9 +22,6 @@ int abs(int x)
 	return x;
 }
 
-int currentVelocityX = 0;
-int currentVelocityY = 0;
-
 Debounce_t switchPosX = {GPIOA, GPIO_PIN_8, 0, GPIO_PIN_SET};
 Debounce_t switchNegX = {GPIOA, GPIO_PIN_9, 0, GPIO_PIN_SET};
 
@@ -65,7 +62,7 @@ float readAnalog(uint32_t channel)
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
 	{
-		return (float)HAL_ADC_GetValue(&hadc1); // / 255.0f;
+		return (float)HAL_ADC_GetValue(&hadc1) / 64.0f;
 	}
 	return 0.0f; // Return 0 if ADC read fails
 }
@@ -94,12 +91,10 @@ void ControllerInit()
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-	ADC_ChannelConfTypeDef sConfig;
-
 	// Common analog config
 	hadc1.Instance = ADC1;
 	hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-	hadc1.Init.Resolution = ADC_RESOLUTION_8B;
+	hadc1.Init.Resolution = ADC_RESOLUTION_6B;
 	// hadc1.Init.ScanConvMode = DISABLE;
 	// hadc1.Init.ContinuousConvMode = DISABLE;
 	// hadc1.Init.DiscontinuousConvMode = DISABLE;
@@ -112,8 +107,11 @@ void ControllerInit()
 
 	HAL_ADC_Init(&hadc1);
 
-	velocityX = 1000;
-	velocityY = 1000;
+	targetVelocityX = 0;
+	targetVelocityY = 0;
+
+	currentVelocityX = 0;
+	currentVelocityY = 0;
 }
 
 void ControllerMain()
@@ -127,69 +125,73 @@ void ControllerMain()
 	float potX = readAnalog(ADC_CHANNEL_0);
 	float potY = readAnalog(ADC_CHANNEL_1);
 
+	targetVelocityX = 2.0f * (potX - 0.5f) * MAX_VELOCITY;
+	targetVelocityY = 2.0f * (potY - 0.5f) * MAX_VELOCITY;
+
+	// print targetVelocityX and targetVelocityY
 	char bufferX[100];
 	gcvt(potX, 4, bufferX);
 
 	char bufferY[100];
-	gcvt(potY, 4, bufferY);	
+	gcvt(potY, 4, bufferY);
 
-	printf("Analog value: ");
+	printf("Velocity Values: ");
 	printf(bufferX);
 	printf(" ");
 	printf(bufferY);
 	printf("\n");
 
-	if (limitSwitchPosX && velocityX > 0.0f) // Hit positive X limit switch
+	if (limitSwitchPosX && targetVelocityX > 0.0f) // Hit positive X limit switch
 	{
-		velocityX = -1000;
+		targetVelocityX = 0;
 
 		printf("Hit positive X limit switch\n");
 	}
-	else if (limitSwitchNegX && velocityX < 0.0f) // Hit negative X limit switch
+	else if (limitSwitchNegX && targetVelocityX < 0.0f) // Hit negative X limit switch
 	{
-		positionX = 0;
-		velocityX = 1000;
+		targetPositionX = 0;
+		targetVelocityX = 0;
 
 		printf("Hit negative X limit switch\n");
 	}
 
 	// Run the X motor if the velocity has changed
-	if (currentVelocityX != velocityX)
+	if (abs(currentVelocityX - targetVelocityX) > 500)
 	{
 		printf("Running X motor\n");
 
-		L6470_Run(L6470_X, sign(velocityX), abs(velocityX));
-		currentVelocityX = velocityX;
+		L6470_Run(L6470_X, sign(targetVelocityX), abs(targetVelocityX));
+		currentVelocityX = targetVelocityX;
 	}
 
-	if (limitSwitchPosY && velocityY > 0.0f) // Hit positive Y limit switch
+	if (limitSwitchPosY && targetVelocityY > 0.0f) // Hit positive Y limit switch
 	{
-		velocityY = -1000;
+		targetVelocityY = 0;
 
 		printf("Hit positive Y limit switch\n");
 	}
-	else if (limitSwitchNegY && velocityY < 0.0f) // Hit negative Y limit switch
+	else if (limitSwitchNegY && targetVelocityY < 0.0f) // Hit negative Y limit switch
 	{
-		positionY = 0;
-		velocityY = 1000;
+		targetPositionY = 0;
+		targetVelocityY = 0;
 
 		printf("Hit negative Y limit switch\n");
 	}
 
 	// Run the Y motor if the velocity has changed
-	if (currentVelocityY != velocityY)
+	if (abs(currentVelocityY - targetVelocityY) > 500)
 	{
 		printf("Running Y motor\n");
 
-		L6470_Run(L6470_Y, sign(velocityY), abs(velocityY));
-		currentVelocityY = velocityY;
+		L6470_Run(L6470_Y, sign(targetVelocityY), abs(targetVelocityY));
+		currentVelocityY = targetVelocityY;
 	}
 
 	// If both limit switches are hit in the same direction, stop the motor
 	if ((limitSwitchPosX && limitSwitchNegX) || (limitSwitchPosY && limitSwitchNegY))
 	{
-		velocityX = 0.0f;
-		velocityY = 0.0f;
+		targetVelocityX = 0.0f;
+		targetVelocityY = 0.0f;
 
 		L6470_HardStop(L6470_X);
 		L6470_HardStop(L6470_Y);
