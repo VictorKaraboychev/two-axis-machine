@@ -65,7 +65,7 @@ float readAnalog(uint32_t channel)
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
 	{
-		return (float)HAL_ADC_GetValue(&hadc1) / 255.0f;
+		return (float)HAL_ADC_GetValue(&hadc1); // / 255.0f;
 	}
 	return 0.0f; // Return 0 if ADC read fails
 }
@@ -128,10 +128,10 @@ void ControllerMain()
 	float potY = readAnalog(ADC_CHANNEL_1);
 
 	char bufferX[100];
-	gcvt(potX, 2, bufferX);
+	gcvt(potX, 4, bufferX);
 
 	char bufferY[100];
-	gcvt(potY, 2, bufferY);
+	gcvt(potY, 4, bufferY);	
 
 	printf("Analog value: ");
 	printf(bufferX);
