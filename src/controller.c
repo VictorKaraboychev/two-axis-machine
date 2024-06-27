@@ -62,7 +62,7 @@ float readAnalog(uint32_t channel)
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
 	{
-		return (float)HAL_ADC_GetValue(&hadc1) / 64.0f;
+		return (float)HAL_ADC_GetValue(&hadc1) / 63.0f;
 	}
 	return 0.0f; // Return 0 if ADC read fails
 }
@@ -125,21 +125,22 @@ void ControllerMain()
 	float potX = readAnalog(ADC_CHANNEL_0);
 	float potY = readAnalog(ADC_CHANNEL_1);
 
-	targetVelocityX = 2.0f * (potX - 0.5f) * MAX_VELOCITY;
-	targetVelocityY = 2.0f * (potY - 0.5f) * MAX_VELOCITY;
+	// Calculate target velocity based on potentiometer position and deadzone of 20%
+	targetVelocityX = 2.0f * (potX - 0.5f) * MAX_VELOCITY * (potX < 0.4f || potX > 0.5f);
+	targetVelocityY = 2.0f * (potY - 0.5f) * MAX_VELOCITY * (potY < 0.4f || potY > 0.5f);
 
-	// print targetVelocityX and targetVelocityY
-	char bufferX[100];
-	gcvt(potX, 4, bufferX);
+	// // print targetVelocityX and targetVelocityY
+	// char bufferX[100];
+	// gcvt((float)targetVelocityX, 6, bufferX);
 
-	char bufferY[100];
-	gcvt(potY, 4, bufferY);
+	// char bufferY[100];
+	// gcvt((float)targetVelocityY, 6, bufferY);
 
-	printf("Velocity Values: ");
-	printf(bufferX);
-	printf(" ");
-	printf(bufferY);
-	printf("\n");
+	// printf("Velocity Values: ");
+	// printf(bufferX);
+	// printf(" ");
+	// printf(bufferY);
+	// printf("\n");
 
 	if (limitSwitchPosX && targetVelocityX > 0.0f) // Hit positive X limit switch
 	{
@@ -156,7 +157,7 @@ void ControllerMain()
 	}
 
 	// Run the X motor if the velocity has changed
-	if (abs(currentVelocityX - targetVelocityX) > 500)
+	if (abs(currentVelocityX - targetVelocityX) > 1000)
 	{
 		printf("Running X motor\n");
 
@@ -179,7 +180,7 @@ void ControllerMain()
 	}
 
 	// Run the Y motor if the velocity has changed
-	if (abs(currentVelocityY - targetVelocityY) > 500)
+	if (abs(currentVelocityY - targetVelocityY) > 1000)
 	{
 		printf("Running Y motor\n");
 
