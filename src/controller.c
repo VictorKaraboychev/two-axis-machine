@@ -1,5 +1,32 @@
 #include "controller.h"
 
+// ------------------ Global Variables ------------------
+
+// initialize the switch debounce delay and directions of each limit switch
+Debounce_t switchPosX = {GPIOA, GPIO_PIN_8, 0, GPIO_PIN_SET};
+Debounce_t switchNegX = {GPIOA, GPIO_PIN_9, 0, GPIO_PIN_SET};
+
+Debounce_t switchPosY = {GPIOB, GPIO_PIN_10, 0, GPIO_PIN_SET};
+Debounce_t switchNegY = {GPIOB, GPIO_PIN_4, 0, GPIO_PIN_SET};
+
+// declare adc handler for reading analog values
+ADC_HandleTypeDef hadc1;
+
+// target and current velocity values for the motors
+int targetVelocityX;
+int targetVelocityY;
+
+int currentVelocityX;
+int currentVelocityY;
+
+// ------------------ Private Functions ------------------
+
+/**
+ * @brief returns the sign of a float
+ *
+ * @param x the float to check the sign of
+ * @return int 1 if x is positive, -1 if x is negative, 0 if x is 0
+ */
 int sign(float x)
 {
 	if (x > 0)
@@ -13,6 +40,12 @@ int sign(float x)
 	return 0;
 }
 
+/**
+ * @brief returns the absolute value of an integer
+ *
+ * @param x the integer to get the absolute value of
+ * @return int the absolute value of x
+ */
 int abs(int x)
 {
 	if (x < 0)
@@ -22,14 +55,16 @@ int abs(int x)
 	return x;
 }
 
-Debounce_t switchPosX = {GPIOA, GPIO_PIN_8, 0, GPIO_PIN_SET};
-Debounce_t switchNegX = {GPIOA, GPIO_PIN_9, 0, GPIO_PIN_SET};
-
-Debounce_t switchPosY = {GPIOB, GPIO_PIN_10, 0, GPIO_PIN_SET};
-Debounce_t switchNegY = {GPIOB, GPIO_PIN_4, 0, GPIO_PIN_SET};
-
+/**
+ * @brief Debounces a limit switch
+ *
+ * @param switchState the state of the limit switch
+ * @param delay the debounce delay
+ * @return true if the limit switch is pressed, false otherwise
+ */
 bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 {
+	// Read the current state of the switch
 	uint32_t currentTime = HAL_GetTick();
 	GPIO_PinState currentState = HAL_GPIO_ReadPin(switchState->GPIOx, switchState->GPIO_Pin);
 
@@ -48,8 +83,12 @@ bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 	return false;
 }
 
-ADC_HandleTypeDef hadc1;
-
+/**
+ * @brief Reads an analog value from the ADC
+ *
+ * @param channel the channel to read from
+ * @return float the analog value from 0 to 1
+ */
 float readAnalog(uint32_t channel)
 {
 	ADC_ChannelConfTypeDef sConfig;
@@ -66,6 +105,8 @@ float readAnalog(uint32_t channel)
 	}
 	return 0.0f; // Return 0 if ADC read fails
 }
+
+// ------------------ Public Functions ------------------
 
 void ControllerInit()
 {
@@ -116,6 +157,7 @@ void ControllerInit()
 
 void ControllerMain()
 {
+	// debounce limit switches to prevent false positives
 	bool limitSwitchPosX = debounceLimitSwitch(&switchPosX, DEBOUNCE_DELAY);
 	bool limitSwitchNegX = debounceLimitSwitch(&switchNegX, DEBOUNCE_DELAY);
 
@@ -126,8 +168,8 @@ void ControllerMain()
 	float potY = readAnalog(ADC_CHANNEL_1);
 
 	// Calculate target velocity based on potentiometer position and deadzone of 20%
-	targetVelocityX = 2.0f * (potX - 0.5f) * MAX_VELOCITY * (potX < 0.4f || potX > 0.5f);
-	targetVelocityY = 2.0f * (potY - 0.5f) * MAX_VELOCITY * (potY < 0.4f || potY > 0.5f);
+	targetVelocityX = (int)(2.0f * (potX - 0.5f) * MAX_VELOCITY * (potX < 0.4f || potX > 0.6f));
+	targetVelocityY = (int)(2.0f * (potY - 0.5f) * MAX_VELOCITY * (potY < 0.4f || potY > 0.6f));
 
 	// // print targetVelocityX and targetVelocityY
 	// char bufferX[100];
@@ -142,15 +184,14 @@ void ControllerMain()
 	// printf(bufferY);
 	// printf("\n");
 
-	if (limitSwitchPosX && targetVelocityX > 0.0f) // Hit positive X limit switch
+	if (limitSwitchPosX && targetVelocityX > 0) // Hit positive X limit switch
 	{
 		targetVelocityX = 0;
 
 		printf("Hit positive X limit switch\n");
 	}
-	else if (limitSwitchNegX && targetVelocityX < 0.0f) // Hit negative X limit switch
+	else if (limitSwitchNegX && targetVelocityX < 0) // Hit negative X limit switch
 	{
-		targetPositionX = 0;
 		targetVelocityX = 0;
 
 		printf("Hit negative X limit switch\n");
@@ -165,15 +206,14 @@ void ControllerMain()
 		currentVelocityX = targetVelocityX;
 	}
 
-	if (limitSwitchPosY && targetVelocityY > 0.0f) // Hit positive Y limit switch
+	if (limitSwitchPosY && targetVelocityY > 0) // Hit positive Y limit switch
 	{
 		targetVelocityY = 0;
 
 		printf("Hit positive Y limit switch\n");
 	}
-	else if (limitSwitchNegY && targetVelocityY < 0.0f) // Hit negative Y limit switch
+	else if (limitSwitchNegY && targetVelocityY < 0) // Hit negative Y limit switch
 	{
-		targetPositionY = 0;
 		targetVelocityY = 0;
 
 		printf("Hit negative Y limit switch\n");

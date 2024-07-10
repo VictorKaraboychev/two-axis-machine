@@ -18,22 +18,20 @@
 
 typedef struct
 {
-	GPIO_TypeDef *GPIOx;
-	uint16_t GPIO_Pin;
-	uint32_t lastDebounceTime;
-	GPIO_PinState lastState;
+	GPIO_TypeDef *GPIOx;	   // GPIO port
+	uint16_t GPIO_Pin;		   // GPIO pin
+	uint32_t lastDebounceTime; // last time the output pin was toggled
+	GPIO_PinState lastState;   // last state of the output pin
 } Debounce_t;
 
+/**
+ * @brief initializes the controller pins
+ */
 void ControllerInit();
+
+/**
+ * @brief main controller loop
+ */
 void ControllerMain();
-
-int targetPositionX;
-int targetVelocityX;
-
-int targetPositionY;
-int targetVelocityY;
-
-int currentVelocityX;
-int currentVelocityY;
 
 #endif // CONTROLLER_H
