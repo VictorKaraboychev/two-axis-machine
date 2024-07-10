@@ -181,39 +181,26 @@ void ControllerMain()
 	bool limitSwitchPosY = debounceLimitSwitch(&switchPosY, DEBOUNCE_DELAY);
 	bool limitSwitchNegY = debounceLimitSwitch(&switchNegY, DEBOUNCE_DELAY);
 
-	// debounce potentiometers to prevent sending too many commands to the motors
-	float potX = debounceAnalogInput(&potX, ANALOG_DEBOUNCE_DELAY, readAnalog(ADC_CHANNEL_0));
-	float potY = debounceAnalogInput(&potY, ANALOG_DEBOUNCE_DELAY, readAnalog(ADC_CHANNEL_1));
+	// obtain analog values from the potentiometers
+	float potX = readAnalog(ADC_CHANNEL_0);
+	float potY = readAnalog(ADC_CHANNEL_1);
 
 	// Calculate target velocity based on potentiometer position and deadzone of 20%
 	targetVelocityX = (int)(2.0f * (potX - 0.5f) * MAX_VELOCITY * (potX < 0.4f || potX > 0.6f));
 	targetVelocityY = (int)(2.0f * (potY - 0.5f) * MAX_VELOCITY * (potY < 0.4f || potY > 0.6f));
-
-	// // print targetVelocityX and targetVelocityY
-	// char bufferX[100];
-	// gcvt((float)targetVelocityX, 6, bufferX);
-
-	// char bufferY[100];
-	// gcvt((float)targetVelocityY, 6, bufferY);
-
-	// printf("Velocity Values: ");
-	// printf(bufferX);
-	// printf(" ");
-	// printf(bufferY);
-	// printf("\n");
 
 	// X LIMIT SWITCH CHECKS
 	if (limitSwitchPosX && targetVelocityX > 0) // Hit positive X limit switch
 	{
 		targetVelocityX = 0;
 
-		printf("Hit positive X limit switch\n");
+		printf("Hit positive X limit switch\n\r");
 	}
 	else if (limitSwitchNegX && targetVelocityX < 0) // Hit negative X limit switch
 	{
 		targetVelocityX = 0;
 
-		printf("Hit negative X limit switch\n");
+		printf("Hit negative X limit switch\n\r");
 	}
 
 	// Y LIMIT SWITCHES CHECKS
@@ -221,13 +208,13 @@ void ControllerMain()
 	{
 		targetVelocityY = 0;
 
-		printf("Hit positive Y limit switch\n");
+		printf("Hit positive Y limit switch\n\r");
 	}
 	else if (limitSwitchNegY && targetVelocityY < 0) // Hit negative Y limit switch
 	{
 		targetVelocityY = 0;
 
-		printf("Hit negative Y limit switch\n");
+		printf("Hit negative Y limit switch\n\r");
 	}
 
 	// If both limit switches are hit in the same direction, stop the motor
@@ -236,27 +223,40 @@ void ControllerMain()
 		targetVelocityX = 0.0f;
 		targetVelocityY = 0.0f;
 
-		L6470_HardStop(L6470_X);
-		L6470_HardStop(L6470_Y);
-
 		// printf("Hit both limit switches\n");
 	}
 
 	// Run the X motor if the velocity has changed
 	if (currentVelocityX != targetVelocityX)
 	{
-		printf("Running X motor\n");
+		// printf("Running X motor\n\r");
 
-		L6470_Run(L6470_X, targetVelocityX > 0, abs(targetVelocityX));
+		if (targetVelocityX == 0)
+		{
+			L6470_HardStop(L6470_X);
+		}
+		else
+		{
+			L6470_Run(L6470_X, targetVelocityX > 0, abs(targetVelocityX));
+		}
+
 		currentVelocityX = targetVelocityX;
 	}
 
 	// Run the Y motor if the velocity has changed
 	if (currentVelocityY != targetVelocityY)
 	{
-		printf("Running Y motor\n");
+		// printf("Running Y motor\n\r");
 
-		L6470_Run(L6470_Y, targetVelocityY > 0, abs(targetVelocityY));
+		if (targetVelocityY == 0)
+		{
+			L6470_HardStop(L6470_Y);
+		}
+		else
+		{
+			L6470_Run(L6470_Y, targetVelocityY > 0, abs(targetVelocityY));
+		}
+
 		currentVelocityY = targetVelocityY;
 	}
 }
