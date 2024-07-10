@@ -1,5 +1,8 @@
 #include "controller.h"
 
+#include <L6470.h>
+#include <stdbool.h>
+
 // ------------------ Global Variables ------------------
 
 // initialize the switch debounce delay and directions of each limit switch
@@ -12,6 +15,10 @@ Debounce_t switchNegY = {GPIOB, GPIO_PIN_4, 0, GPIO_PIN_SET};
 // declare adc handler for reading analog values
 ADC_HandleTypeDef hadc1;
 
+// initialize the potentiometer debounce delay and last state of each potentiometer
+DebounceAnalog_t potX = {0.0f, 0};
+DebounceAnalog_t potY = {0.0f, 0};
+
 // target and current velocity values for the motors
 int targetVelocityX;
 int targetVelocityY;
@@ -20,25 +27,6 @@ int currentVelocityX;
 int currentVelocityY;
 
 // ------------------ Private Functions ------------------
-
-/**
- * @brief returns the sign of a float
- *
- * @param x the float to check the sign of
- * @return int 1 if x is positive, -1 if x is negative, 0 if x is 0
- */
-int sign(float x)
-{
-	if (x > 0)
-	{
-		return 1;
-	}
-	else if (x < 0)
-	{
-		return -1;
-	}
-	return 0;
-}
 
 /**
  * @brief returns the absolute value of an integer
@@ -60,7 +48,7 @@ int abs(int x)
  *
  * @param switchState the state of the limit switch
  * @param delay the debounce delay
- * @return true if the limit switch is pressed, false otherwise
+ * @return previous state of the switch if the debounce delay has not been reached, otherwise the current state
  */
 bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 {
@@ -80,7 +68,7 @@ bool debounceLimitSwitch(Debounce_t *switchState, uint32_t delay)
 		return currentState;
 	}
 
-	return false;
+	return switchState->lastState;
 }
 
 /**
@@ -104,6 +92,35 @@ float readAnalog(uint32_t channel)
 		return (float)HAL_ADC_GetValue(&hadc1) / 63.0f;
 	}
 	return 0.0f; // Return 0 if ADC read fails
+}
+
+/**
+ * @brief Debounces an analog input
+ *
+ * @param switchState the state of the analog input
+ * @param delay the debounce delay
+ * @param analogValue the analog value to debounce
+ * @return previous state of the analog input if the debounce delay has not been reached, otherwise the current state
+ */
+float debounceAnalogInput(DebounceAnalog_t *switchState, uint32_t delay, float analogValue)
+{
+	// Read the current state of the switch
+	uint32_t currentTime = HAL_GetTick();
+	float currentState = analogValue;
+
+	if (abs((int)(currentState - switchState->lastState)) > ANALOG_DEBOUNCE_TOLERANCE)
+	{
+		// Reset the debounce timer
+		switchState->lastDebounceTime = currentTime;
+		switchState->lastState = currentState;
+	}
+
+	if ((currentTime - switchState->lastDebounceTime) >= delay)
+	{
+		return currentState;
+	}
+
+	return switchState->lastState;
 }
 
 // ------------------ Public Functions ------------------
@@ -164,8 +181,9 @@ void ControllerMain()
 	bool limitSwitchPosY = debounceLimitSwitch(&switchPosY, DEBOUNCE_DELAY);
 	bool limitSwitchNegY = debounceLimitSwitch(&switchNegY, DEBOUNCE_DELAY);
 
-	float potX = readAnalog(ADC_CHANNEL_0);
-	float potY = readAnalog(ADC_CHANNEL_1);
+	// debounce potentiometers to prevent sending too many commands to the motors
+	float potX = debounceAnalogInput(&potX, ANALOG_DEBOUNCE_DELAY, readAnalog(ADC_CHANNEL_0));
+	float potY = debounceAnalogInput(&potY, ANALOG_DEBOUNCE_DELAY, readAnalog(ADC_CHANNEL_1));
 
 	// Calculate target velocity based on potentiometer position and deadzone of 20%
 	targetVelocityX = (int)(2.0f * (potX - 0.5f) * MAX_VELOCITY * (potX < 0.4f || potX > 0.6f));
@@ -184,6 +202,7 @@ void ControllerMain()
 	// printf(bufferY);
 	// printf("\n");
 
+	// X LIMIT SWITCH CHECKS
 	if (limitSwitchPosX && targetVelocityX > 0) // Hit positive X limit switch
 	{
 		targetVelocityX = 0;
@@ -197,15 +216,7 @@ void ControllerMain()
 		printf("Hit negative X limit switch\n");
 	}
 
-	// Run the X motor if the velocity has changed
-	if (abs(currentVelocityX - targetVelocityX) > 1000)
-	{
-		printf("Running X motor\n");
-
-		L6470_Run(L6470_X, sign(targetVelocityX), abs(targetVelocityX));
-		currentVelocityX = targetVelocityX;
-	}
-
+	// Y LIMIT SWITCHES CHECKS
 	if (limitSwitchPosY && targetVelocityY > 0) // Hit positive Y limit switch
 	{
 		targetVelocityY = 0;
@@ -219,15 +230,6 @@ void ControllerMain()
 		printf("Hit negative Y limit switch\n");
 	}
 
-	// Run the Y motor if the velocity has changed
-	if (abs(currentVelocityY - targetVelocityY) > 1000)
-	{
-		printf("Running Y motor\n");
-
-		L6470_Run(L6470_Y, sign(targetVelocityY), abs(targetVelocityY));
-		currentVelocityY = targetVelocityY;
-	}
-
 	// If both limit switches are hit in the same direction, stop the motor
 	if ((limitSwitchPosX && limitSwitchNegX) || (limitSwitchPosY && limitSwitchNegY))
 	{
@@ -238,5 +240,23 @@ void ControllerMain()
 		L6470_HardStop(L6470_Y);
 
 		// printf("Hit both limit switches\n");
+	}
+
+	// Run the X motor if the velocity has changed
+	if (currentVelocityX != targetVelocityX)
+	{
+		printf("Running X motor\n");
+
+		L6470_Run(L6470_X, targetVelocityX > 0, abs(targetVelocityX));
+		currentVelocityX = targetVelocityX;
+	}
+
+	// Run the Y motor if the velocity has changed
+	if (currentVelocityY != targetVelocityY)
+	{
+		printf("Running Y motor\n");
+
+		L6470_Run(L6470_Y, targetVelocityY > 0, abs(targetVelocityY));
+		currentVelocityY = targetVelocityY;
 	}
 }
